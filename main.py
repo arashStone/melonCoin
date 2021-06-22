@@ -1,15 +1,23 @@
 import hashlib
+import datetime
 
+class Transaction:
+    def __init__(self,start,end,amount):#这里的start，end对应lutuocoin里面的from,to
+        self.start = start
+        self.end = end
+        self.amount = amount
 
 class Block:
     nonce = 1
-    def __init__(self, data, preHash):
-        self.data = data
+    def __init__(self, transactions, preHash):
+        self.transactions = transactions
         self.preHash = preHash
+        self.timeStamp = datetime.datetime.now()
         self.hash = self.computeHash()
 
     def computeHash(self):
-        bytesData = bytes(self.data, encoding='utf-8') + bytes(self.preHash, encoding='utf-8') + bytes(self.nonce)
+        bytesData = bytes(str(self.transactions), encoding='utf-8') + bytes(self.preHash, encoding='utf-8') \
+                    + bytes(self.nonce) + bytes(str(self.timeStamp), encoding='utf-8')
         return hashlib.sha256(bytesData).hexdigest()
 
     def getAnswer(self,difficulty):
@@ -23,6 +31,7 @@ class Block:
     def mine(self,difficulty):#利用pow机制防止篡改
         while True:
             self.hash = self.computeHash()
+            #print("enter while.log")
             if(self.hash[:difficulty] != self.getAnswer(difficulty)):
                 self.nonce+=1
                 continue
@@ -35,25 +44,54 @@ class Chain:
     def __init__(self):
         genesisBlock = Block("ancestor", "")
         self.chain = [genesisBlock]
-        self.difficulty = 4
+        self.difficulty = 3
+        self.transactionPool = []
+        self.minerReward = 50
 
     def getLatestBlock(self):
         return self.chain[len(self.chain) - 1]
 
-    def addBlockToChain(self, newBlock):
+    def addTransaction(self,transaction):
+        if(transaction.start == None or transaction.end == None):
+            raise Exception("invalid start or end")
+
+        self.transactionPool.append(transaction)
+
+
+    '''def addBlockToChain(self, newBlock):
         newBlock.preHash = self.getLatestBlock().hash
         newBlock.mine(self.difficulty)
+        self.chain.append(newBlock)'''
+
+    def mineTransactionPool(self,minerRewardAddress):
+        minerRewardTransaction = Transaction(
+            "",#矿工奖励由系统发放，所以没有转账人
+            minerRewardAddress,#矿工的转账地址
+            self.minerReward
+        )
+        self.transactionPool.append(minerRewardTransaction)
+
+        #挖矿
+        newBlock = Block(
+            self.transactionPool,
+            self.getLatestBlock().hash
+        )
+        newBlock.mine(self.difficulty)
+
         self.chain.append(newBlock)
+        self.transactionPool = []
 
     def isValid(self):
         if (len(self.chain) == 1 and
-                self.chain[0].hash != hashlib.sha256(bytes(self.chain[0].data, encoding='utf-8') + bytes(self.chain[0].preHash,encoding='utf-8')).hexdigest()):
+                self.chain[0].hash != hashlib.sha256(bytes(self.chain[0].transactions, encoding='utf-8')
+                                                     + bytes(self.chain[0].preHash,encoding='utf-8')
+                                                     + bytes(str(self.chain[0].timeStamp), encoding='utf-8')).hexdigest()):
             return False
 
         index = 1
         while index < len(self.chain):
             if(self.chain[index].hash != self.chain[index].computeHash()):
-                print("data has been tampered!")
+                print("transaction has been tampered!")
                 return False
             if (self.chain[index].preHash != self.chain[index - 1].hash):
                 print("block chain has been broken!")
@@ -66,9 +104,15 @@ class Chain:
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
+    transaction = Transaction("li","liu","3")
+    transaction2 = Transaction("wang", "liu", "4")
     ch = Chain()
-    ch.addBlockToChain(Block("456", ""))
+    ch.addTransaction(transaction)
+    ch.addTransaction(transaction2)
+    ch.mineTransactionPool("xiao")
+    #ch.addBlockToChain(Block(transaction, ""))
     print(ch.getLatestBlock().hash)
+    print(ch.chain[1].__dict__)
     #ch.chain[1].data = "123"
     print(ch.isValid())
 
