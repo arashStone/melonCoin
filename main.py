@@ -1,11 +1,29 @@
-import hashlib
 import datetime
+import hashlib
+from Crypto import Signature
 
 class Transaction:
     def __init__(self,start,end,amount):#这里的start，end对应lutuocoin里面的from,to
         self.start = start
         self.end = end
         self.amount = amount
+
+    def computeHash(self):
+        bytesData = bytes(str(self.start), encoding='utf-8') + bytes(self.end, encoding='utf-8') \
+                    + bytes(str(self.amount), encoding='utf-8')
+        return hashlib.sha256(bytesData).hexdigest()
+
+    def sign(self,privateKey):
+        self.signature = Signature.pkcs1_15.new(privateKey).sign(self.computeHash())
+
+    def isValid(self):
+        if self.start == None:
+            return True
+        if self.signature == None:
+            print("miss signature")
+            return False
+
+        return Signature.pkcs1_15.new(self.start).verify(self.computeHash(), self.signature)
 
 class Block:
     nonce = 1
@@ -29,6 +47,9 @@ class Block:
         return answer
 
     def mine(self,difficulty):#利用pow机制防止篡改
+        if self.validateTransactions() == False:
+            raise Exception("invalid transaction in pool, stop mining")
+
         while True:
             self.hash = self.computeHash()
             #print("enter while.log")
@@ -39,6 +60,14 @@ class Block:
                 break
 
         print("finishing Mining")
+
+    def validateTransactions(self):
+        for transaction in self.transactions:
+            if transaction.isValid() != True:
+                print("illegal transaction")
+                return False
+
+        return True
 
 class Chain:
     def __init__(self):
@@ -54,6 +83,9 @@ class Chain:
     def addTransaction(self,transaction):
         if(transaction.start == None or transaction.end == None):
             raise Exception("invalid start or end")
+
+        if transaction.isValid() == False:
+            raise Exception("invalid transaction")
 
         self.transactionPool.append(transaction)
 
