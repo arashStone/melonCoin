@@ -1,6 +1,9 @@
 import datetime
 import hashlib
-from Crypto import Signature
+from Crypto.PublicKey import RSA
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
+
 
 class Transaction:
     def __init__(self,start,end,amount):#这里的start，end对应lutuocoin里面的from,to
@@ -9,21 +12,24 @@ class Transaction:
         self.amount = amount
 
     def computeHash(self):
-        bytesData = bytes(str(self.start), encoding='utf-8') + bytes(self.end, encoding='utf-8') \
+        bytesData = bytes(str(self.start), encoding='utf-8') + bytes(str(self.end), encoding='utf-8') \
                     + bytes(str(self.amount), encoding='utf-8')
-        return hashlib.sha256(bytesData).hexdigest()
+        return SHA256.new(bytesData)
 
     def sign(self,privateKey):
-        self.signature = Signature.pkcs1_15.new(privateKey).sign(self.computeHash())
+        self.signature = pkcs1_15.new(privateKey).sign(self.computeHash())
 
     def isValid(self):
-        if self.start == None:
+        if not self.start:
             return True
-        if self.signature == None:
+        if not self.signature:
             print("miss signature")
             return False
-
-        return Signature.pkcs1_15.new(self.start).verify(self.computeHash(), self.signature)
+        try:
+            pkcs1_15.new(self.start).verify(self.computeHash(), self.signature)
+            return True
+        except:
+            return False
 
 class Block:
     nonce = 1
@@ -76,12 +82,13 @@ class Chain:
         self.difficulty = 3
         self.transactionPool = []
         self.minerReward = 50
+        self.index = Index()
 
     def getLatestBlock(self):
         return self.chain[len(self.chain) - 1]
 
     def addTransaction(self,transaction):
-        if(transaction.start == None or transaction.end == None):
+        if(not transaction.start or not transaction.end):
             raise Exception("invalid start or end")
 
         if transaction.isValid() == False:
@@ -110,6 +117,8 @@ class Chain:
         )
         newBlock.mine(self.difficulty)
 
+        for t in self.transactionPool:
+            self.index[t.signature] = t#由该交易的数字签名，直接定位到交易本身
         self.chain.append(newBlock)
         self.transactionPool = []
 
@@ -133,18 +142,48 @@ class Chain:
 
         return True
 
+class entry:
+    def __init__(self,transcation):
+        self.t = transcation#由该交易的数字签名，直接定位到交易本身
+        self.updateTime = datetime.datetime.now()
+
+class Index:
+    index = {}
+
+    def CleanIndex(self):
+
+        for sig in  self.index:
+            if (datetime.datetime.now()-self.index[sig].updateTime).minute > 10:#超过十分钟没有被使用
+                self.index[sig].pop()#清理该映射
+
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    transaction = Transaction("li","liu","3")
-    transaction2 = Transaction("wang", "liu", "4")
+    key1 = RSA.generate(2048)
+    private_key1 = key1.export_key()
+    public_key1 = key1.publickey().export_key()
+
+    key2 = RSA.generate(2048)
+    private_key2 = key2.export_key()
+    public_key2 = key2.publickey().export_key()
+
+    from1 = RSA.importKey(public_key1)
+    to1 = RSA.importKey(private_key1)
+    from2 = RSA.importKey(public_key2)
+
+    transaction = Transaction(from1,from2,"3")
+    transaction.sign(to1)
+    print(transaction.isValid())
+
+
     ch = Chain()
     ch.addTransaction(transaction)
-    ch.addTransaction(transaction2)
-    ch.mineTransactionPool("xiao")
+
+    #ch.mineTransactionPool("xiao")
     #ch.addBlockToChain(Block(transaction, ""))
-    print(ch.getLatestBlock().hash)
-    print(ch.chain[1].__dict__)
+    #print(ch.getLatestBlock().hash)
+    #print(ch.chain[1].__dict__)
     #ch.chain[1].data = "123"
-    print(ch.isValid())
+    #print(ch.isValid())
 
